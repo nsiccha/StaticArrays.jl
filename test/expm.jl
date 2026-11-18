@@ -32,3 +32,47 @@ using StaticArrays, Test, LinearAlgebra
         end
     end
 end
+@testset "Real Padé approximation and Float32 factorization" begin
+    # Large Padé coefficients overflow a determinant-based 3×3 solve in Float32.
+    A = Float32[3 0.1 0.2; 0.2 2 0.1; 0.1 0.2 1]
+    actual = exp(SMatrix{3,3}(A))
+    @test all(isfinite, actual)
+    @test actual ≈ exp(A) rtol=1e-5
+
+    for T in (Float32, Float64), n in (0, 1, 2, 3, 4, 6)
+        A = T.(reshape(sin.(1:(n*n)), n, n))
+        n == 0 || (A ./= opnorm(A, 1))
+        # Exercise each Padé degree and both sides of the scaling threshold.
+        for magnitude in (0.005, 0.1, 0.5, 1.5, 3.0, 20.0)
+            B = A .* T(magnitude)
+            rtol = T === Float32 ? 1e-4 : 1e-10
+            atol = T === Float32 ? 1e-6 : 1e-12
+            @test exp(SMatrix{n,n}(B)) ≈ exp(B) rtol=rtol atol=atol
+        end
+    end
+
+    @test exp(@SMatrix [0.3 1.2; 0.0 0.3]) ≈ exp([0.3 1.2; 0.0 0.3])
+end
+
+@testset "Real 2x2 repeated eigenvalue limit" begin
+    for T in (Float32, Float64), v in (-1.1e-4, -1e-4, -1e-10, 0.0, 1e-10, 1e-4, 1.1e-4)
+        A = @SMatrix T[0.3 1.2; v/(4*1.2) 0.3]
+        @test exp(A) ≈ exp(Matrix(A)) rtol=(T === Float32 ? 2e-6 : 1e-12)
+    end
+end
+
+@testset "Scaling beyond machine integer exponent range" begin
+    for T in (Float32, Float64)
+        A = @SMatrix T[0 1e22 0; 0 0 0; 0 0 0]
+        @test exp(A) ≈ one(A) + A rtol=1e-6
+    end
+end
+
+@testset "Real 2x2 integer promotion precedes discriminant arithmetic" begin
+    for I in (Int32, Int64)
+        A = I[-100000 1; 0 0]
+        @test Matrix(exp(SMatrix{2,2}(A))) ≈ [0.0 1e-5; 0.0 1.0] rtol=1e-12
+    end
+    A = Int64[typemin(Int64) 0; 0 0]
+    @test Matrix(exp(SMatrix{2,2}(A))) == [0.0 0.0; 0.0 1.0]
+end
