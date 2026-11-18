@@ -1,0 +1,234 @@
+{
+  "schema": 1,
+  "line": {
+    "repo": "nsiccha/StaticArrays.jl",
+    "ref": "dogfood",
+    "sha": "4ff59112e7aa98fa5c54f2cca50cf8eabc80b0b7"
+  },
+  "upstream": {
+    "repo": "JuliaArrays/StaticArrays.jl",
+    "ref": "master",
+    "sha": "fc7fa70c1f9e30aae53897bdaea3b7b5f6554cce"
+  },
+  "prepared_at": "2026-11-18T12:16:30Z",
+  "problems": [
+    {
+      "id": "float32-pade-solve",
+      "role": "fix",
+      "title": "The exponential of a finite 3×3 Float32 matrix can contain NaNs",
+      "summary": "The Float32 static matrix exponential returns nonfinite entries on a modest input for which the dense result is finite.",
+      "repairs": [],
+      "upstream_refs": [
+        {
+          "url": "https://github.com/JuliaArrays/StaticArrays.jl/issues/785",
+          "relation": "reports"
+        },
+        {
+          "url": "https://github.com/JuliaArrays/StaticArrays.jl/issues/1322",
+          "relation": "related"
+        },
+        {
+          "url": "https://github.com/JuliaArrays/StaticArrays.jl/issues/1285",
+          "relation": "related"
+        }
+      ],
+      "draft": {
+        "title": "The exponential of a finite 3×3 Float32 matrix can contain NaNs",
+        "body": "The Float32 static matrix exponential returns nonfinite entries on a modest input for which the dense result is finite.\n\n```julia\nusing StaticArrays, LinearAlgebra\nA = Float32[3 0.1 0.2; 0.2 2 0.1; 0.1 0.2 1]\nE = exp(SMatrix{3,3}(A))\n@show all(isfinite, E) isapprox(Matrix(E), exp(A); rtol=1e-5)\n```\n\nLarge Padé coefficients can make a determinant-based solve overflow. The fork explicitly uses an LU factorization for the Padé solve, keeping this exponential finite.",
+        "prepared_at": "2026-11-18T12:16:30Z"
+      },
+      "fix": {
+        "branch": "kb/all-real-static-exp-20261011",
+        "commits": [
+          {
+            "sha": "03fd23a659ad3597c146b650da53a3751878ec8f",
+            "title": "Preserve lazy real static matrix exponentials on current master",
+            "original": [
+              "03fd23a659ad3597c146b650da53a3751878ec8f"
+            ]
+          }
+        ],
+        "why_together": "The existing fork commit contains this repair and its regression alongside the other real matrix exponential cases. All four cases can be applied with this one cherry-pick."
+      },
+      "depends_on": [],
+      "requires": [],
+      "validation": [
+        {
+          "base": "fc7fa70c1f9e30aae53897bdaea3b7b5f6554cce",
+          "julia": "1.10.12",
+          "bounds": "forced",
+          "tests": [
+            "test/expm.jl"
+          ],
+          "result": "passed",
+          "detail": "125 of 125 assertions passed on the merged line."
+        },
+        {
+          "base": "fc7fa70c1f9e30aae53897bdaea3b7b5f6554cce",
+          "julia": "1.10.12",
+          "bounds": "forced",
+          "tests": [
+            "Isolated upstream and dogfood runs of the issue reproducer"
+          ],
+          "result": "passed",
+          "detail": "The Float32 reproducer contained nonfinite entries on upstream. All entries were finite on dogfood."
+        }
+      ]
+    },
+    {
+      "id": "integer-2x2-exponential",
+      "role": "fix",
+      "title": "Integer overflow corrupts the exponential of a real 2×2 static matrix",
+      "summary": "A triangular integer matrix with a zero eigenvalue should exponentiate to a matrix with a unit bottom-right entry. The static method can produce zero there.",
+      "repairs": [],
+      "upstream_refs": [],
+      "draft": {
+        "title": "Integer overflow corrupts the exponential of a real 2×2 static matrix",
+        "body": "A triangular integer matrix with a zero eigenvalue should exponentiate to a matrix with a unit bottom-right entry. The static method can produce zero there.\n\n```julia\nusing StaticArrays\nA = @SMatrix Int32[-100000 1; 0 0]\n@show exp(A)       # expected approximately [0 1e-5; 0 1]\n```\n\nThe real two-by-two formula forms the discriminant in the input integer type. Squaring the diagonal difference overflows Int32 before the floating-point exponential is evaluated. The fork promotes all four entries to the result type first.",
+        "prepared_at": "2026-11-18T12:16:30Z"
+      },
+      "fix": {
+        "branch": "kb/all-real-static-exp-20261011",
+        "commits": [
+          {
+            "sha": "03fd23a659ad3597c146b650da53a3751878ec8f",
+            "title": "Preserve lazy real static matrix exponentials on current master",
+            "original": [
+              "03fd23a659ad3597c146b650da53a3751878ec8f"
+            ]
+          }
+        ],
+        "why_together": "The existing fork commit contains this repair and its regression alongside the other real matrix exponential cases. All four cases can be applied with this one cherry-pick."
+      },
+      "depends_on": [],
+      "requires": [],
+      "validation": [
+        {
+          "base": "fc7fa70c1f9e30aae53897bdaea3b7b5f6554cce",
+          "julia": "1.10.12",
+          "bounds": "forced",
+          "tests": [
+            "test/expm.jl"
+          ],
+          "result": "passed",
+          "detail": "125 of 125 assertions passed on the merged line."
+        },
+        {
+          "base": "fc7fa70c1f9e30aae53897bdaea3b7b5f6554cce",
+          "julia": "1.10.12",
+          "bounds": "forced",
+          "tests": [
+            "Isolated upstream and dogfood runs of the issue reproducer"
+          ],
+          "result": "passed",
+          "detail": "The bottom-right entry was 0 on upstream and 1 on dogfood, as required for this triangular matrix."
+        }
+      ]
+    },
+    {
+      "id": "near-repeated-2x2-exponential",
+      "role": "fix",
+      "title": "The real 2×2 matrix exponential loses its off-diagonal near a repeated eigenvalue",
+      "summary": "At two closely spaced real eigenvalues, the larger off-diagonal entry of the static exponential can disappear. For the matrix below it should round to one.",
+      "repairs": [],
+      "upstream_refs": [
+        {
+          "url": "https://github.com/JuliaArrays/StaticArrays.jl/issues/1295",
+          "relation": "related"
+        }
+      ],
+      "draft": {
+        "title": "The real 2×2 matrix exponential loses its off-diagonal near a repeated eigenvalue",
+        "body": "At two closely spaced real eigenvalues, the larger off-diagonal entry of the static exponential can disappear. For the matrix below it should round to one.\n\n```julia\nusing StaticArrays, LinearAlgebra\nA = @SMatrix [0.0 1.0; 1e-34 0.0]\n@show exp(A)[1,2] exp(Matrix(A))[1,2]\n```\n\nThe eigenvalues are ±10⁻¹⁷. Subtracting their exponentials in Float64 gives zero even though the divided difference is near one. The fork uses the Taylor expansion of the divided difference near a zero discriminant and retains the existing formula away from it.",
+        "prepared_at": "2026-11-18T12:16:30Z"
+      },
+      "fix": {
+        "branch": "kb/all-real-static-exp-20261011",
+        "commits": [
+          {
+            "sha": "03fd23a659ad3597c146b650da53a3751878ec8f",
+            "title": "Preserve lazy real static matrix exponentials on current master",
+            "original": [
+              "03fd23a659ad3597c146b650da53a3751878ec8f"
+            ]
+          }
+        ],
+        "why_together": "The existing fork commit contains this repair and its regression alongside the other real matrix exponential cases. All four cases can be applied with this one cherry-pick."
+      },
+      "depends_on": [],
+      "requires": [],
+      "validation": [
+        {
+          "base": "fc7fa70c1f9e30aae53897bdaea3b7b5f6554cce",
+          "julia": "1.10.12",
+          "bounds": "forced",
+          "tests": [
+            "test/expm.jl"
+          ],
+          "result": "passed",
+          "detail": "125 of 125 assertions passed on the merged line."
+        },
+        {
+          "base": "fc7fa70c1f9e30aae53897bdaea3b7b5f6554cce",
+          "julia": "1.10.12",
+          "bounds": "forced",
+          "tests": [
+            "Isolated upstream and dogfood runs of the issue reproducer"
+          ],
+          "result": "passed",
+          "detail": "The off-diagonal entry was 0 on upstream and 1 on dogfood, matching the limit."
+        }
+      ]
+    },
+    {
+      "id": "large-scaling-exponent",
+      "role": "fix",
+      "title": "Scaling a finite nilpotent matrix can overflow the integer power of two",
+      "summary": "A finite 3×3 matrix with a single large off-diagonal entry has square zero. Its exponential is exactly I + A, yet the static implementation can produce nonfinite entries.",
+      "repairs": [],
+      "upstream_refs": [],
+      "draft": {
+        "title": "Scaling a finite nilpotent matrix can overflow the integer power of two",
+        "body": "A finite 3×3 matrix with a single large off-diagonal entry has square zero. Its exponential is exactly I + A, yet the static implementation can produce nonfinite entries.\n\n```julia\nusing StaticArrays, LinearAlgebra\nA = @SMatrix [0.0 1e22 0.0; 0.0 0.0 0.0; 0.0 0.0 0.0]\n@show exp(A)[1,2]    # expected 1e22\n@show exp(A) ≈ one(A) + A\n```\n\nScaling and squaring computes a power of two with a machine integer before converting it to the matrix element type. The required exponent exceeds the integer range for this input. The fork raises a floating-point two to that exponent before evaluating the Padé approximation.",
+        "prepared_at": "2026-11-18T12:16:30Z"
+      },
+      "fix": {
+        "branch": "kb/all-real-static-exp-20261011",
+        "commits": [
+          {
+            "sha": "03fd23a659ad3597c146b650da53a3751878ec8f",
+            "title": "Preserve lazy real static matrix exponentials on current master",
+            "original": [
+              "03fd23a659ad3597c146b650da53a3751878ec8f"
+            ]
+          }
+        ],
+        "why_together": "The existing fork commit contains this repair and its regression alongside the other real matrix exponential cases. All four cases can be applied with this one cherry-pick."
+      },
+      "depends_on": [],
+      "requires": [],
+      "validation": [
+        {
+          "base": "fc7fa70c1f9e30aae53897bdaea3b7b5f6554cce",
+          "julia": "1.10.12",
+          "bounds": "forced",
+          "tests": [
+            "test/expm.jl"
+          ],
+          "result": "passed",
+          "detail": "125 of 125 assertions passed on the merged line."
+        },
+        {
+          "base": "fc7fa70c1f9e30aae53897bdaea3b7b5f6554cce",
+          "julia": "1.10.12",
+          "bounds": "forced",
+          "tests": [
+            "Isolated upstream and dogfood runs of the issue reproducer"
+          ],
+          "result": "passed",
+          "detail": "The off-diagonal entry was NaN on upstream and 1e22 on dogfood, matching I + A."
+        }
+      ]
+    }
+  ]
+}
